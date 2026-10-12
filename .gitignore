@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+__pycache__/
+*.pyc
+# Private material produced by skills never lives in the repo.
+skills/explain-codebase/tours/
+runs/

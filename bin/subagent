@@ -1,0 +1,147 @@
+#!/usr/bin/env node
+// subagent: delegate a brief to a cheaper model in any local agent harness.
+import { readFileSync } from 'node:fs';
+import { runBatch } from '../lib/subagent/batch.mjs';
+import { HARNESSES, TIERS, UsageError, detectSelf, loadTiers, userTiersPath } from '../lib/subagent/config.mjs';
+import { doctor, formatDoctor } from '../lib/subagent/doctor.mjs';
+import { runTask } from '../lib/subagent/run.mjs';
+
+const HELP = `subagent: run a brief through a local agent harness on a chosen model tier.
+
+Usage:
+  subagent doctor [--probe] [--via h1,h2] [--tier cheap] [--include-unsandboxed] [--json]
+  subagent run --via <harness|other> [options] (--prompt TEXT | --prompt-file FILE | - for stdin)
+  subagent batch <tasks.jsonl> [--parallel 3] [--dry-run] [--json]
+  subagent tiers [--json]
+
+Harnesses: ${HARNESSES.join(', ')}. "other" = a different model family from the caller.
+Tiers: ${TIERS.join(', ')} (from config/tiers.json, overridden by ${userTiersPath()}).
+
+run options:
+  --tier <t>            model tier (default cheap)
+  --model <m>           exact model, overrides the tier
+  --effort <e>          reasoning effort where the harness supports it
+  --mode read|write     default read. write needs --cwd (use a scratch git worktree)
+  --cwd <dir>           working directory for the worker (default: current dir)
+  --attach <file>       inline a file into the brief (repeatable; required for ollama)
+  --timeout <sec>       default 900
+  --budget-usd <n>      spend cap (claude only)
+  --label <name>        name for the run record
+  --raw                 send the brief without the worker preamble
+  --allow-unsandboxed   allow dsh, which cannot be limited to read-only
+  --dry-run             print the command that would run; spend nothing
+  --json                print the run record as JSON (default: the answer text)
+
+Each run writes brief.md, output.md, stdout.log, stderr.log and meta.json to a run
+folder under ~/.local/state/agent-skills/runs (or $TMPDIR when that is not writable).
+Exit code: 0 ok, 1 worker failed, 2 usage error, 124 timeout.`;
+
+const BOOL = new Set(['probe', 'json', 'dry-run', 'raw', 'allow-unsandboxed', 'include-unsandboxed', 'help']);
+const MULTI = new Set(['attach']);
+
+function parseArgs(argv) {
+  const opts = { _: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '-') { opts.stdin = true; continue; }
+    if (a === '-h') { opts.help = true; continue; }
+    if (!a.startsWith('--')) { opts._.push(a); continue; }
+    let [key, val] = a.slice(2).split(/=(.*)/s, 2);
+    if (BOOL.has(key)) { opts[key] = val === undefined ? true : val !== 'false'; continue; }
+    if (val === undefined) {
+      val = argv[++i];
+      if (val === undefined) throw new UsageError(`--${key} needs a value`);
+    }
+    if (MULTI.has(key)) (opts[key] ||= []).push(val);
+    else opts[key] = val;
+  }
+  return opts;
+}
+
+function readStdin() {
+  try {
+    return readFileSync(0, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+function taskFrom(o) {
+  let prompt = o.prompt;
+  if (prompt == null && o.stdin) prompt = readStdin();
+  return {
+    via: o.via, tier: o.tier, model: o.model, effort: o.effort, mode: o.mode, cwd: o.cwd,
+    prompt, prompt_file: o['prompt-file'], attach: o.attach, timeout: o.timeout, label: o.label,
+    budgetUsd: o['budget-usd'], raw: o.raw, allowUnsandboxed: o['allow-unsandboxed'], dryRun: o['dry-run'],
+  };
+}
+
+async function main() {
+  const o = parseArgs(process.argv.slice(2));
+  const cmd = o._[0];
+  if (!cmd || o.help || cmd === 'help') {
+    console.log(HELP);
+    return 0;
+  }
+  const tiers = loadTiers();
+
+  if (cmd === 'tiers') {
+    if (o.json) {
+      console.log(JSON.stringify(tiers, null, 2));
+      return 0;
+    }
+    for (const h of HARNESSES) {
+      const t = tiers[h] || {};
+      const fmt = (x) => (x?.model ? `${x.model}${x.effort ? ` (${x.effort})` : ''}` : '(profile default)');
+      console.log(`${h.padEnd(9)} cheap=${fmt(t.cheap)}  standard=${fmt(t.standard)}  frontier=${fmt(t.frontier)}  data: ${t.data ?? '-'}`);
+    }
+    console.log(`\ncaller: ${detectSelf() ?? 'plain shell'}; overrides: ${userTiersPath()}`);
+    return 0;
+  }
+
+  if (cmd === 'doctor') {
+    const report = await doctor({
+      tiers, probe: o.probe, only: o.via ? o.via.split(',') : undefined, tier: o.tier || 'cheap',
+      includeUnsandboxed: o['include-unsandboxed'], timeout: o.timeout ? Number(o.timeout) : 180,
+    });
+    console.log(o.json ? JSON.stringify(report, null, 2) : formatDoctor(report));
+    return 0;
+  }
+
+  if (cmd === 'run') {
+    const r = await runTask(taskFrom(o), { tiers });
+    if (r.dry_run) {
+      console.log(JSON.stringify(r, null, 2));
+      return 0;
+    }
+    if (o.json) console.log(JSON.stringify(r, null, 2));
+    else {
+      process.stdout.write(r.text.endsWith('\n') ? r.text : `${r.text}\n`);
+      const cost = r.cost_usd != null ? ` $${Number(r.cost_usd).toFixed(4)}` : '';
+      console.error(`[subagent] ${r.via} ${r.model ?? '(default model)'} ${r.ok ? 'ok' : `FAILED: ${r.error}`} ${r.duration_s}s${cost} -> ${r.run_dir}`);
+    }
+    return r.ok ? 0 : r.timed_out ? 124 : 1;
+  }
+
+  if (cmd === 'batch') {
+    const file = o._[1];
+    if (!file) throw new UsageError('batch needs a tasks.jsonl file');
+    const summary = await runBatch(file, {
+      tiers, parallel: Number(o.parallel || 3), dryRun: o['dry-run'],
+      onDone: o.json ? undefined : (r) => console.error(`[subagent] ${r.id}: ${r.dry_run ? 'dry-run' : r.ok ? `ok ${r.duration_s}s` : `FAILED ${r.error}`}${r.output_file ? ` -> ${r.output_file}` : ''}`),
+    });
+    if (o.json || o['dry-run']) console.log(JSON.stringify(summary, null, 2));
+    else console.log(`${summary.ok}/${summary.total} ok; summary: ${summary.batch_dir}/batch.json`);
+    return summary.ok === summary.total ? 0 : 1;
+  }
+
+  throw new UsageError(`unknown command "${cmd}" (try: subagent --help)`);
+}
+
+main().then(
+  (code) => process.exit(code ?? 0),
+  (e) => {
+    console.error(`subagent: ${e.message}`);
+    process.exit(e instanceof UsageError ? 2 : 1);
+  },
+);

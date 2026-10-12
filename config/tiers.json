@@ -1,0 +1,60 @@
+{
+  "_comment": "Model tiers per harness. Override per machine in ~/.config/agent-skills/tiers.json (deep-merged over this file). 'data' says where a brief goes when you dispatch to that harness. Claude rows use exact IDs: in Claude Code 2.1.283 the bare aliases resolve to older models (haiku -> Haiku 4.5, sonnet -> Sonnet 5).",
+  "claude": {
+    "data": "cloud (Anthropic)",
+    "cheap": {
+      "model": "claude-haiku-5-5"
+    },
+    "standard": {
+      "model": "claude-sonnet-5-5"
+    },
+    "frontier": {
+      "model": "claude-opus-5-5"
+    }
+  },
+  "codex": {
+    "data": "cloud (OpenAI)",
+    "cheap": {
+      "model": "gpt-6-luna",
+      "effort": "low"
+    },
+    "standard": {
+      "model": "gpt-6.1-sol",
+      "effort": "medium"
+    },
+    "frontier": {
+      "model": "gpt-6-astra",
+      "effort": "high"
+    }
+  },
+  "opencode": {
+    "data": "depends on the model's provider: ollama/* stays local, openrouter/* goes to OpenRouter (needs providers with those names in your OpenCode config)",
+    "cheap": {
+      "model": "ollama/qwen3.5:latest"
+    },
+    "standard": {
+      "model": "ollama/qwen3-coder:latest"
+    },
+    "frontier": {
+      "model": "openrouter/deepseek/deepseek-v4-pro"
+    }
+  },
+  "ollama": {
+    "data": "local only (no network); pull the tier models first or override them",
+    "cheap": {
+      "model": "qwen3.5:latest"
+    },
+    "standard": {
+      "model": "qwen3-coder:latest"
+    },
+    "frontier": {
+      "model": "qwen3.8:27b"
+    }
+  },
+  "dsh": {
+    "data": "cloud (the provider set in your dsh profile); check it before sending anything private",
+    "cheap": {},
+    "standard": {},
+    "frontier": {}
+  }
+}
