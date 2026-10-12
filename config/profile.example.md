@@ -29,6 +29,12 @@ Running examples for explanations, and context for reviews.
 
 - Learning tracker: <skill name, if you have one>
 
+## Learn later
+
+- Reading packs go to: <folder; `learn-later` saves it in learn-later.json on first use>
+- Note rules for that folder: <for example "every note links to [[Learning]] and has a #learning tag">
+- Export to: <none | Notion | ...>
+
 ## GitHub defaults
 
 - Personal account: <user>; organizations: <orgs and their rules>

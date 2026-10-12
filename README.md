@@ -10,6 +10,7 @@ Agent skills that work in every local agent harness: Claude Code, Codex, OpenCod
 | `security` | Defensive review of a diff, repo, dependencies or config. Scanners run first, then cheap models map the code, a stronger model hunts, and a different model family tries to disprove each finding. |
 | `github-setup` | Audit a GitHub repo against a baseline (`personal-public`, `personal-private`, `team`) and apply the fixes you approve: branch rules, security features, Actions token, community files. Also sets up GitHub Projects boards. |
 | `cloud-setup` | Audit a Google Cloud project (AWS and Azure by checklist) for budgets, IAM, keys, public exposure and logging, and bootstrap new projects with keyless GitHub Actions access. |
+| `learn-later` | Queue topics you want to learn about, then get a 10-minute reading pack for each: a plain brief, SVG diagrams, key terms, a worked example, dated sources and self-check questions. Plain Markdown in a folder you pick once (an Obsidian vault works as is). |
 | `explain` | Explain recent work in the current task. |
 | `state-of-the-world` | Take stock of a whole piece of work, with a color-coded flow diagram from the start to the goal. |
 | `explain-concept` | Teach one concept as an interactive page. |
@@ -56,6 +57,7 @@ Personal context lives in `~/.config/agent-skills/`, never in the repo. Every fi
 |---|---|
 | `profile.md` | Who you are, your projects, the checks to run before reviews or pushes, data rules (which providers may see private code), GitHub and cloud defaults. Skills read it when it exists. Start from `config/profile.example.md`. |
 | `tiers.json` | Your model per harness and tier. Deep-merged over `config/tiers.json`. |
+| `learn-later.json` | Where reading packs go (`root`), saved by `queue.mjs init` the first time you use `learn-later`, plus optional `index_header` lines for your notes app (for example a hub link and tags). |
 | `share_lint.json` | Extra patterns that make a codebase tour fail the "shareable" check (your launchers, instance names), and default ports your repos document. |
 | `private-terms.txt` | Words that must never appear in this repo (names, customers, internal hosts), one per line. `scripts/validate.mjs` fails if it finds one. Useful if you fork the repo and publish your changes. |
 
