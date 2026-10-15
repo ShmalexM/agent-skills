@@ -80,6 +80,7 @@ subagent batch tasks.jsonl --parallel 4
 - `--dry-run` prints the exact command and spends nothing.
 - Write tasks need `--mode write --cwd <scratch worktree>`.
 - Ollama has no tools. Give it what it needs with `--attach`.
+- `--attach` inlines text files with 1-based line numbers (`cat -n` style), so line references in the answer match the file. Pass `--line-numbers=false` to inline the plain text.
 - The batch file format is in `references/brief-template.md`.
 
 **Sandboxes.** A harness that runs commands in a sandbox usually blocks the network and keychain that another harness needs. Run `subagent` with this harness's sandbox override (in Claude Code, `dangerouslyDisableSandbox: true` on that Bash call; in Codex, ask for escalation). Say that you did it. Run long jobs in the background and carry on.

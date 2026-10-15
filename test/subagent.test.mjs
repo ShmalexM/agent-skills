@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { CLAUDE_READ_TOOLS, buildCommand } from '../lib/subagent/adapters.mjs';
 import { parseBatch } from '../lib/subagent/batch.mjs';
 import { UsageError, detectSelf, loadTiers, merge, resolveModel, resolveVia } from '../lib/subagent/config.mjs';
-import { WORKER_PREAMBLE, assemblePrompt, normalizeTask, runTask } from '../lib/subagent/run.mjs';
+import { WORKER_PREAMBLE, assemblePrompt, normalizeTask, numberLines, runTask } from '../lib/subagent/run.mjs';
 
 const tiers = loadTiers({ HOME: '/nonexistent', AGENT_SKILLS_TIERS: '/nonexistent/tiers.json' });
 const dir = mkdtempSync(join(tmpdir(), 'subagent-test-'));
@@ -116,8 +116,27 @@ test('assemblePrompt: preamble and mode line unless raw; attachments inlined', (
   assert.ok(p.startsWith(WORKER_PREAMBLE));
   assert.ok(p.includes('Mode: read-only'));
   assert.ok(p.includes('## Brief\n\nsum it'));
-  assert.ok(p.includes(`## Attached: ${file}`) && p.includes('hello file'));
+  assert.ok(p.includes(`## Attached: ${file}`) && p.includes('     1\thello file'));
   assert.equal(assemblePrompt({ ...t, raw: true, attach: [] }), 'sum it');
+});
+
+test('assemblePrompt: attached text files carry 1-based cat -n line numbers', () => {
+  const file = join(dir, 'mod.mjs');
+  const src = Array.from({ length: 22 }, (_, i) => (i === 21 ? 'export const last = 1;' : `// line ${i + 1}`)).join('\n') + '\n';
+  writeFileSync(file, src);
+  const t = normalizeTask({ via: 'ollama', prompt: 'list exports', cwd: dir, attach: [file] }, { tiers, env: {} });
+  assert.equal(t.lineNumbers, true);
+  const p = assemblePrompt(t);
+  assert.ok(p.includes('```mjs\n     1\t// line 1\n'));
+  assert.ok(p.includes('    22\texport const last = 1;\n```'), 'line 22 is numbered 22 and no empty line 23 follows');
+  assert.ok(p.includes('1-based line number'));
+  const plain = assemblePrompt({ ...t, lineNumbers: false });
+  assert.ok(plain.includes('```mjs\n// line 1\n') && !plain.includes('1-based'));
+  const bin = join(dir, 'blob.bin');
+  writeFileSync(bin, Buffer.from([0x61, 0x00, 0x62]));
+  assert.ok(!assemblePrompt({ ...t, attach: [bin] }).includes('     1\t'), 'binary files are not numbered');
+  assert.equal(numberLines(''), '     1\t');
+  assert.equal(numberLines('a\n\nb'), '     1\ta\n     2\t\n     3\tb');
 });
 
 test('runTask dry run spends nothing and hides the brief in argv', async () => {
