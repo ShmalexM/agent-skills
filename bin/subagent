@@ -23,7 +23,9 @@ run options:
   --effort <e>          reasoning effort where the harness supports it
   --mode read|write     default read. write needs --cwd (use a scratch git worktree)
   --cwd <dir>           working directory for the worker (default: current dir)
-  --attach <file>       inline a file into the brief (repeatable; required for ollama)
+  --attach <file>       inline a file into the brief (repeatable; required for ollama).
+                        Text files get 1-based line-number prefixes, like cat -n
+  --line-numbers=false  inline attached files without line numbers
   --timeout <sec>       default 900
   --budget-usd <n>      spend cap (claude only)
   --label <name>        name for the run record
@@ -36,7 +38,7 @@ Each run writes brief.md, output.md, stdout.log, stderr.log and meta.json to a r
 folder under ~/.local/state/agent-skills/runs (or $TMPDIR when that is not writable).
 Exit code: 0 ok, 1 worker failed, 2 usage error, 124 timeout.`;
 
-const BOOL = new Set(['probe', 'json', 'dry-run', 'raw', 'allow-unsandboxed', 'include-unsandboxed', 'help']);
+const BOOL = new Set(['probe', 'json', 'dry-run', 'raw', 'line-numbers', 'allow-unsandboxed', 'include-unsandboxed', 'help']);
 const MULTI = new Set(['attach']);
 
 function parseArgs(argv) {
@@ -71,7 +73,7 @@ function taskFrom(o) {
   if (prompt == null && o.stdin) prompt = readStdin();
   return {
     via: o.via, tier: o.tier, model: o.model, effort: o.effort, mode: o.mode, cwd: o.cwd,
-    prompt, prompt_file: o['prompt-file'], attach: o.attach, timeout: o.timeout, label: o.label,
+    prompt, prompt_file: o['prompt-file'], attach: o.attach, lineNumbers: o['line-numbers'], timeout: o.timeout, label: o.label,
     budgetUsd: o['budget-usd'], raw: o.raw, allowUnsandboxed: o['allow-unsandboxed'], dryRun: o['dry-run'],
   };
 }

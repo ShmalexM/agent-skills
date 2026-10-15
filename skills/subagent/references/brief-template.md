@@ -58,7 +58,7 @@ Every file under backend/ that imports APIRouter or FastAPI has been read.
 
 One JSON object per line. Lines starting with `//` are comments. Relative paths resolve from the batch file's folder. Every line is checked before any task runs.
 
-Keys: `id`, `via` (claude, codex, opencode, ollama, dsh, other), `tier`, `model`, `effort`, `mode` (read or write), `cwd`, `prompt` or `prompt_file`, `attach` (array), `timeout` (seconds), `label`, `budgetUsd`, `raw`, `allowUnsandboxed`.
+Keys: `id`, `via` (claude, codex, opencode, ollama, dsh, other), `tier`, `model`, `effort`, `mode` (read or write), `cwd`, `prompt` or `prompt_file`, `attach` (array), `lineNumbers` (default true), `timeout` (seconds), `label`, `budgetUsd`, `raw`, `allowUnsandboxed`.
 
 ```jsonl
 // same review brief, two model families
