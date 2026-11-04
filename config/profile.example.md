@@ -35,6 +35,12 @@ Running examples for explanations, and context for reviews.
 - Note rules for that folder: <for example "every note links to [[Learning]] and has a #learning tag">
 - Export to: <none | Notion | ...>
 
+## Meeting packets
+
+- Packets go to: <folder, for example ~/meeting-packets>
+- Writing rules for follow-ups: <for example "short, no em dashes", or the name of a skill to follow>
+- Email drafts: <"create them without asking" or "only when I ask">. `meeting-packet` never sends.
+
 ## GitHub defaults
 
 - Personal account: <user>; organizations: <orgs and their rules>
