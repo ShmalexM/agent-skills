@@ -11,6 +11,7 @@ Agent skills that work in every local agent harness: Claude Code, Codex, OpenCod
 | `github-setup` | Audit a GitHub repo against a baseline (`personal-public`, `personal-private`, `team`) and apply the fixes you approve: branch rules, security features, Actions token, community files. Also sets up GitHub Projects boards. |
 | `cloud-setup` | Audit a Google Cloud project (AWS and Azure by checklist) for budgets, IAM, keys, public exposure and logging, and bootstrap new projects with keyless GitHub Actions access. |
 | `learn-later` | Queue topics you want to learn about, then get a 10-minute reading pack for each: a plain brief, SVG diagrams, key terms, a worked example, dated sources and self-check questions. Plain Markdown in a folder you pick once (an Obsidian vault works as is). |
+| `meeting-packet` | Turn a recorded meeting into a summary of what happened, commitments, open questions and a draft follow-up, all with sources. Reads Quill's local database, or works from a pasted transcript. It never sends anything. |
 | `explain` | Explain recent work in the current task. |
 | `state-of-the-world` | Take stock of a whole piece of work, with a color-coded flow diagram from the start to the goal. |
 | `explain-concept` | Teach one concept as an interactive page. |
