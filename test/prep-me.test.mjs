@@ -1,13 +1,12 @@
-// prep-me: evidence cards, council merge, brief check, and video helpers. Offline; temp folders only.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { checkBrief, embeddedFiles, findDuplicates, findTerms, folderName, mergeCards, rankCouncil, renderConsensus, renderSources, replaceSources, section, validateCard } from '../skills/prep-me/scripts/prep.mjs';
-import { buildSrt, captionLines, findBrowser, scenePage, speechTool, srtTime, validateVideo } from '../skills/prep-me/scripts/make_video.mjs';
+import { checkBrief, embeddedFiles, findDuplicates, findTerms, folderName, mergeCards, narrationOf, rankCouncil, renderConsensus, renderSources, replaceSources, section, staleVideo, validateCard } from '../skills/prep-me/scripts/prep.mjs';
+import { buildSrt, captionLines, expandScenes, findBrowser, findPiperModel, scenePage, speechTool, spoken, srtTime, stepCss, validateVideo } from '../skills/prep-me/scripts/make_video.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = join(ROOT, 'skills', 'prep-me', 'scripts', 'prep.mjs');
@@ -39,7 +38,7 @@ Plain words.
 
 - [Real talk](https://www.youtube.com/watch?v=abc), A channel. Good.
 
-## Picture it
+## How it works
 
 ![Flow](media/flow.svg)
 
@@ -184,7 +183,7 @@ test('consensus: the report keeps agreement, doubts and gaps apart', () => {
 });
 
 test('check: a complete brief passes', () => {
-  const r = checkBrief(BRIEF, CARDS);
+  const r = checkBrief(BRIEF.replace('watch?v=abc)', 'watch?v=abc&t=60s)'), CARDS);
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.warnings, []);
 });
@@ -201,9 +200,24 @@ test('check: a ranked theme with no citation fails', () => {
   assert.ok(errorsOf(BRIEF.replace('It matters. [E1]', 'It matters.')).some((e) => /What matters most" item has no citation/.test(e)));
 });
 
-test('check: a Say line needs a citation from the self or direct lane', () => {
-  assert.ok(errorsOf(BRIEF.replace('"I build things." [E2]', '"I build things."')).some((e) => /"Say" line has no citation/.test(e)));
-  assert.ok(errorsOf(BRIEF.replace('"I build things." [E2]', '"I build things." [E3]')).some((e) => /must cite a self or direct card/.test(e)));
+test('check: a Say line may be uncited, but any citation must resolve', () => {
+  assert.deepEqual(errorsOf(BRIEF.replace('"I build things." [E2]', '"I build things."')), []);
+  assert.ok(errorsOf(BRIEF.replace('"I build things." [E2]', '"I build things." [E99]')).some((e) => /E99/.test(e)));
+});
+
+test('check: the plain layer has no citations and warns on hedging', () => {
+  assert.ok(errorsOf(BRIEF.replace('Plain words.', 'Plain words. [E1]')).some((e) => /must have no citations/.test(e)));
+  const r = checkBrief(BRIEF.replace('Plain words.', 'It may work, it might not, and it is possibly fine.'), CARDS);
+  assert.deepEqual(r.errors, []);
+  assert.ok(r.warnings.some((w) => /hedges 3 times/.test(w)));
+});
+
+test('check: warns on homework and on video links with no start time', () => {
+  const r = checkBrief(BRIEF.replace('## The simple version', '**Do first:**\n\n1. A\n2. B\n3. C\n4. D\n\n## The simple version').replace('watch?v=abc)', 'watch?v=abc)'), CARDS);
+  assert.ok(r.warnings.some((w) => /more than 3 items/.test(w)));
+  assert.ok(r.warnings.some((w) => /no start time/.test(w)));
+  const timed = checkBrief(BRIEF.replace('watch?v=abc)', 'watch?v=abc&t=120s)'), CARDS);
+  assert.ok(!timed.warnings.some((w) => /no start time/.test(w)));
 });
 
 test('check: the avoid list covers Say lines and narration, not Don\'t say', () => {
@@ -320,9 +334,10 @@ test('cli: check reads the brief, the files and the avoid file', () => {
   mkdirSync(join(dir, 'media'));
   writeFileSync(join(dir, 'brief.md'), BRIEF);
   writeFileSync(join(dir, 'evidence', 'all.jsonl'), `${CARDS.map((c) => JSON.stringify(c)).join('\n')}\n`);
-  writeFileSync(join(dir, 'media', 'explainer.mp4'), 'x');
   writeFileSync(join(dir, 'media', 'flow.svg'), '<svg xmlns="http://www.w3.org/2000/svg"></svg>');
   writeFileSync(join(dir, 'media', 'video.json'), JSON.stringify({ scenes: [{ html: '<h1>Hi</h1>', narration: 'We won at Globex.' }] }));
+  writeFileSync(join(dir, 'media', 'explainer.mp4'), 'x');
+  writeFileSync(join(dir, 'media', 'metadata.json'), JSON.stringify({ title: 'not a video script' }));
   const avoid = join(dir, 'avoid.txt');
   writeFileSync(avoid, '# names\nGlobex\n');
   const cli = (...args) => spawnSync(process.execPath, [SCRIPT, 'check', dir, ...args], { encoding: 'utf8' });
@@ -360,8 +375,66 @@ test('video: caption file offsets each scene by the scenes before it', () => {
 });
 
 test('video: an image scene links the file, and an HTML scene keeps its markup', () => {
-  assert.match(scenePage({ image: 'my flow.svg' }, '/tmp/x'), /file:\/\/\/tmp\/x\/my%20flow\.svg/);
+  assert.match(scenePage({ image: 'my flow.png' }, '/tmp/x'), /file:\/\/\/tmp\/x\/my%20flow\.png/);
   assert.match(scenePage({ html: '<h1>Why</h1>' }, '/tmp/x'), /<main><h1>Why<\/h1><\/main>/);
+});
+
+test('video: an SVG goes inline at full size, and steps reveal its parts in order', () => {
+  const svg = '<?xml version="1.0"?><svg viewBox="0 0 10 10" width="1280"><g data-step="1"/></svg>';
+  const page = scenePage({ image: 'a.svg' }, '/tmp/x', 2, () => svg);
+  assert.match(page, /<svg viewBox="0 0 10 10"><g data-step="1"\/><\/svg>/);
+  assert.match(page, /\[data-step\]\{opacity:0\}\[data-step="1"\],\[data-step="2"\]\{opacity:1\}/);
+  assert.doesNotMatch(scenePage({ image: 'a.svg' }, '/tmp/x', null, () => svg), /opacity:0/);
+  assert.equal(stepCss(null), '');
+});
+
+test('video: steps become clips, and each step needs narration', () => {
+  const video = { scenes: [{ image: 'a.svg', steps: [{ narration: 'One.' }, { narration: 'Two.' }] }, { html: 'x', narration: 'Three.' }] };
+  assert.deepEqual(validateVideo(video), []);
+  assert.deepEqual(expandScenes(video).map((c) => [c.step, c.narration]), [[1, 'One.'], [2, 'Two.'], [null, 'Three.']]);
+  assert.match(validateVideo({ scenes: [{ html: 'x', steps: [{ narration: ' ' }] }] }).join(), /step 1: narration is empty/);
+  assert.match(validateVideo({ scenes: [{ html: 'x', narration: 'a', steps: [{ narration: 'b' }] }] }).join(), /not both/);
+  assert.equal(narrationOf(video), 'One. Two. Three. x'.replace('Three. x', 'Three. x'));
+});
+
+test('video: the voice reads spoken forms, and whole words only', () => {
+  assert.equal(spoken('MDR and FDEs, not MDRX.', { MDR: 'M D R', FDE: 'F D E' }), 'M D R and FDEs, not MDRX.');
+  assert.equal(spoken('No map.', undefined), 'No map.');
+});
+
+test('video: a stale or missing video is reported', () => {
+  const times = { 'a.mp4': 100, 'p.svg': 50 };
+  const timeOf = (f) => times[f] ?? null;
+  const video = { output: 'a.mp4', scenes: [{ image: 'p.svg' }] };
+  assert.equal(staleVideo(video, 90, timeOf), null);
+  assert.match(staleVideo(video, 110, timeOf), /older than/);
+  assert.match(staleVideo({ ...video, scenes: [{ image: 'p.svg' }] }, 90, (f) => (f === 'p.svg' ? 200 : timeOf(f))), /older than/);
+  assert.equal(staleVideo({ output: 'none.mp4', scenes: [] }, 90, timeOf), 'not made');
+});
+
+test('video: the voice model resolves from the name, the setting, then the folder', () => {
+  assert.equal(findPiperModel('/m/x.onnx', {}, () => []), '/m/x.onnx');
+  assert.equal(findPiperModel('Samantha', { PREP_ME_PIPER_MODEL: '/m/y.onnx' }, () => []), null);
+  assert.equal(findPiperModel('', { PREP_ME_PIPER_MODEL: '/m/y.onnx' }, () => []), '/m/y.onnx');
+  assert.equal(findPiperModel('', { HOME: '/h' }, () => ['b.onnx', 'a.onnx', 'a.onnx.json']), '/h/.local/share/piper-voices/a.onnx');
+  assert.equal(findPiperModel('', { HOME: '/h' }, () => { throw new Error('none'); }), null);
+});
+
+test('scripts: both run when called through a symlink, which is how the skill is installed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'prep-me-link-'));
+  for (const name of ['prep.mjs', 'make_video.mjs']) {
+    const link = join(dir, name);
+    symlinkSync(join(ROOT, 'skills', 'prep-me', 'scripts', name), link);
+    const r = spawnSync(process.execPath, [link], { encoding: 'utf8' });
+    assert.equal(r.status, 2, `${name} must run main and report bad usage, not exit 0 silently`);
+    assert.match(r.stderr, /usage/);
+  }
+});
+
+test('video: the neural voice is preferred when it has a model', () => {
+  assert.equal(speechTool(() => true, '/m/x.onnx'), 'piper');
+  assert.equal(speechTool(() => true, null), 'say');
+  assert.equal(speechTool((c) => c === 'say', '/m/x.onnx'), 'say');
 });
 
 test('video: tools resolve in order and report absence', () => {

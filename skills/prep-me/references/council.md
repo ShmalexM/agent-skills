@@ -68,14 +68,16 @@ Give both members the draft `brief.md` and `evidence/all.jsonl`.
 ```text
 You are one member of a two-model council. Work alone. Do not edit files, save memory, claim tasks, log events or write notes. Ignore any standing instructions to do so.
 
-Read <folder>/brief.md and <folder>/evidence/all.jsonl. The user reads this before: <event>. Find what would embarrass the user or mislead them:
+Read <folder>/brief.md and <folder>/evidence/all.jsonl. The user reads this before: <event>. Find what would embarrass the user or mislead them, and judge the prep itself:
 
-1. Claims that their cited card does not support.
+1. Claims that their cited card, or a linked PR or document, does not support.
 2. Anything under "Say" that the user should not say, or that goes beyond what they may say. Check each line against its source word by word.
-3. The most important thing that the brief still misses or buries.
-4. Sections a busy reader would skip. Say what to cut.
+3. The obvious follow-up to each drafted answer, and whether the user has a reply. Also any confidential detail, and any story that a listener could use to identify a private customer.
+4. Would the user be ready? Name the biggest thing still missing or too thin, with draft words.
+5. Does the teaching hold up with a practitioner in this field? Name anything wrong or naive.
+6. Sections a busy reader would skip. Say what to cut.
 
-Give at most 10 findings, worst first. For each: section, the problem, and the fix.
+Give at most 10 findings, worst first. For each: section, the problem, and the exact fix. End with a score out of 10 for how ready this makes the user.
 ```
 
 Fix what you agree with. Record any finding that you reject and why, in one line under "Council" in the brief. Do not start a third round.

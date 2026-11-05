@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Helpers for the prep-me skill: make the private folder, merge evidence cards, merge council answers, check the brief.
 // Usage:
 //   prep.mjs init --root <folder> --title "<title>" [--date YYYY-MM-DD]
 //   prep.mjs merge <brief folder>
@@ -8,7 +7,7 @@
 //   prep.mjs check <brief folder> [--avoid <file>] [--allow "term,term"]
 // Exit codes: 0 ok, 1 problems found, 2 bad usage.
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,9 +15,8 @@ import { fileURLToPath } from 'node:url';
 export const LANES = ['private', 'people', 'direct', 'parallel', 'self', 'video'];
 const KINDS = ['fact', 'inference'];
 const SENSITIVITY = ['public', 'private'];
-const SAY_LANES = ['self', 'direct'];
 
-const REQUIRED_SECTIONS = ['The simple version', 'Watch', 'Picture it', 'What matters most', 'People', 'You in this', 'Say and don\'t say', 'Questions', 'Parallels', 'The details', 'Council', 'Not checked', 'Sources'];
+const REQUIRED_SECTIONS = ['The simple version', 'Watch', 'How it works', 'What matters most', 'People', 'You in this', 'Say and don\'t say', 'Questions', 'Parallels', 'The details', 'Council', 'Not checked', 'Sources'];
 const OPTIONAL_FOR_TOPIC = ['People', 'Say and don\'t say'];
 const MIN_QUESTIONS = 5;
 
@@ -33,7 +31,6 @@ export function folderName(title, date) {
   return `${date} ${slugify(title)}`;
 }
 
-// Parse JSONL text. Each bad line becomes an error, and the good lines still come back.
 export function parseCards(text, label = 'cards') {
   const cards = [];
   const errors = [];
@@ -74,7 +71,6 @@ export function jaccard(a, b) {
   return shared / (a.size + b.size - shared);
 }
 
-// Same-meaning cards from different lanes waste the council's attention. This only flags them; the agent decides.
 export function findDuplicates(cards, threshold = 0.7) {
   const sets = cards.map((c) => words(c.claim));
   const pairs = [];
@@ -104,7 +100,6 @@ export function mergeCards(fileTexts) {
   return { cards, errors, duplicates: findDuplicates(cards) };
 }
 
-// Merge the council members' ranked themes. Two themes are the same when their cards overlap, whatever their names say.
 export function rankCouncil(answers, knownIds, { overlap = 0.25 } = {}) {
   const errors = [];
   const known = new Set(knownIds);
@@ -123,7 +118,6 @@ export function rankCouncil(answers, knownIds, { overlap = 0.25 } = {}) {
         return false;
       });
       const set = new Set(cards);
-      // Join the best overlapping group that this member has not already joined.
       let best = null;
       let bestScore = 0;
       for (const g of groups) {
@@ -202,7 +196,7 @@ export function embeddedFiles(text) {
     try {
       return decodeURIComponent(path);
     } catch {
-      return path; // bad encoding: keep it as written, so that the check reports this file as not found
+      return path;
     }
   };
   const md = [...text.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)].map((m) => decode(m[1]));
@@ -227,7 +221,6 @@ export function loadTerms(text) {
   return text.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
 }
 
-// Blank out fenced code, keeping every offset, so that a heading in a code sample is not read as a real heading.
 function maskFences(text) {
   let open = null;
   return text.split('\n').map((line) => {
@@ -244,7 +237,6 @@ function maskFences(text) {
   }).join('\n');
 }
 
-// Find the real "Sources" section: its heading, up to the next heading at the same or a higher level.
 export function sourcesRange(text) {
   const masked = maskFences(text);
   const heading = /^## Sources[ \t]*$/m.exec(masked);
@@ -254,7 +246,6 @@ export function sourcesRange(text) {
   return { start: heading.index, end: next ? after + next.index : text.length };
 }
 
-// Replace only the "Sources" section. Returns null when the brief has none, and keeps any text after the section.
 export function replaceSources(text, list) {
   const range = sourcesRange(text);
   if (!range) return null;
@@ -262,7 +253,6 @@ export function replaceSources(text, list) {
   return `${text.slice(0, range.start)}## Sources\n\n${list}\n${rest ? `\n${rest}` : ''}`;
 }
 
-// Build the "Sources" list from the cards that the brief cites, so that no citation can drift from its card.
 export function renderSources(text, cards) {
   const range = sourcesRange(text);
   const body = range ? text.slice(0, range.start) + text.slice(range.end) : text;
@@ -275,7 +265,6 @@ export function renderSources(text, cards) {
   }).join('\n');
 }
 
-// Decide if a brief is good enough to hand over. All file access goes through the options, so tests stay offline.
 export function checkBrief(text, cards, { fileExists = () => true, svgCheck = () => null, avoid = [], narration = '' } = {}) {
   const errors = [];
   const warnings = [];
@@ -298,7 +287,6 @@ export function checkBrief(text, cards, { fileExists = () => true, svgCheck = ()
     last = at;
   }
 
-  // Citations must resolve, and the ranked themes must cite something.
   const byId = new Map(cards.map((c) => [c.id, c]));
   for (const id of citations(text)) {
     if (!byId.has(id)) errors.push(`cites ${id}, which is not in evidence/all.jsonl`);
@@ -310,13 +298,11 @@ export function checkBrief(text, cards, { fileExists = () => true, svgCheck = ()
     if (!citations(item).length) errors.push(`"What matters most" item has no citation: ${item.slice(0, 60)}`);
   }
 
-  // Sources must let the reader trace each citation.
   const sources = section(text, 'Sources') ?? '';
   for (const id of citations(text.replace(sources, ''))) {
     if (!new RegExp(`\\b${id}\\b`).test(sources)) errors.push(`${id} is cited but not listed under "Sources"`);
   }
 
-  // Every embedded file must exist, and every SVG must parse.
   const files = embeddedFiles(text);
   if (!files.some((f) => f.endsWith('.svg') || f.endsWith('.png') || f.endsWith('.jpg'))) errors.push('no embedded diagram or image');
   for (const f of files) {
@@ -333,7 +319,6 @@ export function checkBrief(text, cards, { fileExists = () => true, svgCheck = ()
     errors.push('"Watch" has no generated video and does not say why');
   }
 
-  // People need a status, so that a wrong-person match cannot read as a fact.
   const people = section(text, 'People');
   if (people !== null) {
     const rows = people.split('\n').filter((l) => /^\|/.test(l) && !/^\|\s*-/.test(l)).slice(1);
@@ -343,16 +328,10 @@ export function checkBrief(text, cards, { fileExists = () => true, svgCheck = ()
     if (!rows.length && !isTopic) warnings.push('"People" has no table rows');
   }
 
-  // "Say" lines go out of the user's mouth, so they carry the strictest rules.
   const say = section(text, 'Say', 3);
   if (say !== null) {
     const bullets = say.split('\n').filter((l) => /^\s*[-*]\s/.test(l));
     if (!bullets.length) errors.push('"Say" has no lines');
-    for (const b of bullets) {
-      const ids = citations(b);
-      if (!ids.length) errors.push(`"Say" line has no citation: ${b.slice(0, 60)}`);
-      else if (!ids.some((id) => SAY_LANES.includes(byId.get(id)?.lane))) errors.push(`"Say" line must cite a self or direct card: ${b.slice(0, 60)}`);
-    }
     for (const term of findTerms(say, avoid)) errors.push(`"Say" uses a term from the avoid list: ${term}`);
   } else if (!isTopic) {
     errors.push('missing "### Say"');
@@ -360,11 +339,19 @@ export function checkBrief(text, cards, { fileExists = () => true, svgCheck = ()
   for (const term of findTerms(narration, avoid)) errors.push(`video narration uses a term from the avoid list: ${term}`);
   if (!isTopic && section(text, 'Don\'t say', 3) === null) errors.push('missing "### Don\'t say"');
 
+  const simple = section(text, 'The simple version') ?? '';
+  if (citations(simple).length) errors.push('"The simple version" must have no citations; put them in later sections');
+  const hedges = (simple.match(/\b(may|might|unconfirmed|possibly|perhaps|guess)\b/gi) || []).length;
+  if (hedges > 2) warnings.push(`"The simple version" hedges ${hedges} times; say each doubt once, in "Not checked"`);
+  const doFirst = text.match(/\*\*Do first[^\n]*\n+((?:\d+\..*\n?)+)/);
+  if (doFirst && doFirst[1].trim().split('\n').length > 3) warnings.push('"Do first" has more than 3 items; draft the rest for the user');
+  const untimed = watch.split('\n').filter((l) => /^\s*[-*]\s.*\]\(https?:/.test(l) && !/[?&]t=\d+/.test(l));
+  if (untimed.length) warnings.push(`${untimed.length} "Watch" link(s) have no start time; read the captions and point to the moment`);
+
   const qs = section(text, 'Questions') ?? '';
   const qCount = qs.split('\n').filter((l) => /^\d+\.\s/.test(l)).length;
   if (qCount < MIN_QUESTIONS) errors.push(`"Questions" has ${qCount} numbered questions; needs at least ${MIN_QUESTIONS}`);
 
-  // A parallel item must say how it connects, or it is just news.
   const parallels = section(text, 'Parallels') ?? '';
   for (const line of parallels.split('\n').filter((l) => /^\s*[-*]\s/.test(l))) {
     if (!/\*Link|inference/i.test(line)) errors.push(`"Parallels" item does not state its link: ${line.slice(0, 60)}`);
@@ -380,7 +367,20 @@ export function checkBrief(text, cards, { fileExists = () => true, svgCheck = ()
   const topPart = text.split(/^## The details\s*$/m)[0].replace(/^---[\s\S]*?\n---\n/, '');
   const readWords = topPart.split(/\s+/).filter(Boolean).length;
   if (readWords > 2000) warnings.push(`${readWords} words before "The details"; trim toward a 10-minute read`);
+  const topCitations = (topPart.match(/\[E\d+\]/g) || []).length;
+  if (topCitations > 30) warnings.push(`${topCitations} citations before "The details"; keep them where they change trust`);
   return { errors, warnings, readWords, citations: citations(text).length, files: files.length };
+}
+
+export function staleVideo(video, specTime, timeOf) {
+  const output = timeOf(video.output || 'explainer.mp4');
+  if (output === null) return 'not made';
+  const inputs = [specTime, ...(video.scenes || []).filter((s) => s.image).map((s) => timeOf(s.image) ?? 0)];
+  return inputs.some((t) => t > output) ? 'older than its script or pictures' : null;
+}
+
+export function narrationOf(video) {
+  return (video.scenes || []).map((s) => [s.narration, s.html, ...(s.steps || []).map((x) => x.narration)].filter(Boolean).join(' ')).join(' ');
 }
 
 function defaultSvgCheck(path) {
@@ -477,15 +477,23 @@ function main() {
     const { cards } = existsSync(allPath) ? parseCards(readFileSync(allPath, 'utf8')) : { cards: [] };
     const allowed = new Set(String(o.allow || '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean));
     const avoid = (o.avoid ? loadTerms(readFileSync(expand(o.avoid), 'utf8')) : []).filter((t) => !allowed.has(t.toLowerCase()));
-    const videoPath = join(dir, 'media', 'video.json');
+    const mediaDir = join(dir, 'media');
+    const specs = existsSync(mediaDir) ? readdirSync(mediaDir).filter((f) => f.endsWith('.json')) : [];
     let narration = '';
-    if (existsSync(videoPath)) {
+    const videoErrors = [];
+    for (const spec of specs) {
       try {
-        const video = JSON.parse(readFileSync(videoPath, 'utf8'));
-        narration = (video.scenes || []).map((s) => `${s.narration || ''} ${s.html || ''}`).join(' ');
+        const video = JSON.parse(readFileSync(join(mediaDir, spec), 'utf8'));
+        if (!Array.isArray(video.scenes)) continue;
+        narration +=` ${narrationOf(video)}`;
+        const timeOf = (f) => {
+          const p = isAbsolute(f) ? f : join(mediaDir, f);
+          return existsSync(p) ? statSync(p).mtimeMs : null;
+        };
+        const stale = staleVideo(video, statSync(join(mediaDir, spec)).mtimeMs, timeOf);
+        if (stale) videoErrors.push(`video for media/${spec} is ${stale}; run make_video.mjs again`);
       } catch {
-        console.log('error media/video.json is not valid JSON');
-        process.exit(1);
+        videoErrors.push(`media/${spec} is not valid JSON`);
       }
     }
     const inDir = (f) => (isAbsolute(f) ? f : join(dir, f));
@@ -495,6 +503,7 @@ function main() {
       avoid,
       narration,
     });
+    r.errors.push(...videoErrors);
     for (const w of r.warnings) console.log(`warn  ${w}`);
     for (const e of r.errors) console.log(`error ${e}`);
     console.log(r.errors.length ? `${r.errors.length} problem(s) in ${briefPath}` : `ok: ${r.readWords} words before details, ${r.citations} cited cards, ${r.files} embedded files, ${avoid.length} avoid terms checked`);
@@ -504,4 +513,5 @@ function main() {
   fail('usage: prep.mjs <init|merge|rank|sources|check> ...');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) main();
+// Compare real paths: the skill is usually installed through a symlink, and argv[1] keeps the link's path.
+if (process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])) main();

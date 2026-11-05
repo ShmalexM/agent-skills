@@ -4,7 +4,7 @@
 
 ## Set up
 
-1. Find the brief. Read the profile's "Prep me" routes, choose the route and obey its rules. Look for the newest `brief.md` that matches the topic.
+1. Find the brief. Read the profile's "Prep me" routes, choose the route and obey its rules. Look for the newest folder that matches the topic, and read its `brief.md`. Ignore older `brief-<date>.md` copies.
 2. If there is no brief, offer to run `/prep-me` first. Do not drill from memory.
 3. Read the brief in full. Also read `evidence/all.jsonl`, so that you can check what the user says.
 4. Choose who to play. Use the person who runs this event. If there are several people, ask which one, or play each in turn.
@@ -33,7 +33,7 @@ After each answer, step out of character for at most 5 lines:
 Score: <1 to 5>
 Worked: <what to keep, quoted>
 Fix: <the one change that helps most>
-Better: "<a rewrite in the user's own voice, using only facts they may say>"
+Better: "<a rewrite in the user's own voice, using only true facts that are safe to say>"
 ```
 
 Base each score on these four things:
@@ -43,7 +43,7 @@ Base each score on these four things:
 - **Fit.** Did it connect to what this person cares about?
 - **Safe.** Did it stay inside "Say" and away from "Don't say"?
 
-If an answer breaks the "Don't say" list, stop and flag it at once, even if the rest was good. If the user states a fact that the evidence or the resume does not support, ask them about it. Do not write a rewrite that adds new facts.
+If an answer breaks the "Don't say" list, stop and flag it at once, even if the rest was good. Flag it first, and then give the normal feedback. If the user states a fact that the evidence does not support, ask them about it. Do not write a rewrite that adds new facts.
 
 If the user asks for no feedback until the end, save it all for the end.
 

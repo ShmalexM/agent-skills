@@ -12,6 +12,7 @@ Diagrams are hand-written SVG files in `media/`. They must read well in light an
 - **Accessible.** Add `role="img"` on the root, and `<title>` and `<desc>` as its first children. The Markdown alt text says what the diagram shows.
 - **Valid XML.** Escape `&` as `&amp;` and `<` as `&lt;`. `prep.mjs check` parses each embedded SVG.
 - **Truthful.** Every label comes from a card. Mark a guess as a guess.
+- **Ready to build up.** Wrap each part that a video reveals in `<g data-step="1">`, `<g data-step="2">` and so on. Parts with no `data-step` always show. In a Markdown embed, the SVG shows complete.
 
 Useful shapes:
 
@@ -23,38 +24,56 @@ Useful shapes:
 | Timeline | How the situation got here, and what comes next |
 | Before and after | What changes |
 
-## The generated explainer
+## Generated videos
 
-A 60 to 90 second video that teaches the core concept. Each scene is one picture and one short block of narration. Reuse the brief's diagrams where you can.
+Make a series of 2 to 4 videos, 45 to 90 seconds each, and one concept in each. A video teaches. It does not repeat the brief's advice. A viewer who knew nothing can explain the concept afterward.
 
-Write `media/video.json`:
+Write one `media/NN-name.json` for each:
 
 ```json
 {
   "title": "How X works",
-  "output": "explainer.mp4",
+  "output": "01-how-x-works.mp4",
   "voice": "",
+  "pronounce": { "MDR": "M D R", "SOC": "sock" },
   "scenes": [
-    { "image": "flow.svg", "narration": "One or two short sentences for this picture." },
-    { "html": "<h1>Why it matters</h1><p>Three words here.</p>", "narration": "Say what the picture shows." }
+    { "html": "<h1>The short answer</h1><p>Six words here.</p>", "narration": "Say the point first." },
+    { "image": "flow.svg", "steps": [
+      { "narration": "This part appears first, while the voice explains it." },
+      { "narration": "This part appears next." }
+    ] }
   ]
 }
 ```
 
-- `image` is a path to an SVG, PNG or JPEG, relative to `video.json`.
+- `image` is a path to an SVG, PNG or JPEG, relative to the JSON file.
 - `html` is a fragment for a simple text card. The script centers it on a light background. Use either `image` or `html`.
-- `voice` is an optional macOS voice name. An empty value uses the profile's voice or the system default.
-- `output` is relative to `video.json`.
+- `steps` builds the picture as the voice speaks. Step 1 reveals `data-step="1"`, step 2 adds `data-step="2"`, and so on. Each new part fades in. Use `steps` or `narration`, not both.
+- `pronounce` fixes words that the voice misreads. It changes only the audio, so the captions keep the written form.
+- `voice` is optional. It can be a path to a piper `.onnx` model or a macOS voice name.
+- `output` is relative to the JSON file.
 
 How to write it:
 
-- Use 5 to 8 scenes and 150 to 220 words. People say about 150 words each minute.
-- Start with the point. Scene 1 says what the concept is and why the viewer should care.
-- Write for the ear: short sentences, no brackets, no citations, and no abbreviations that a voice will misread. Spell out odd terms the way they sound.
-- Make the narration explain the picture. Do not read the labels aloud.
+- Use 130 to 220 words in each video. People hear about 150 words each minute.
+- Build up at least one diagram in every video. A picture that changes while the voice explains it holds attention, and a static slide does not.
+- Start with the point. Say what the concept is and why the viewer should care.
+- Use one concrete picture or analogy, and real numbers from the cards.
+- Write for the ear: short sentences, no brackets and no citations. Make the narration explain the picture. Do not read the labels aloud.
 - Do not use private names or anything the route's rules forbid in the narration or on the screen.
 - End with the one thing to remember.
 
-The script makes the video, a caption file and `<output>-contact.png`, which shows one frame from each scene. Look at the contact sheet before you hand over.
+The script makes the video, a caption file and `<output>-contact.png`, which shows one frame from each step. Look at the contact sheet before you hand over.
 
-Good voices sound far better than the default. On macOS, the user can add one in System Settings > Accessibility > Spoken Content > System Voice > Manage Voices. Tell the user once if the voice sounds robotic. Do not ask them to pay for anything.
+## The voice
+
+The script prefers [piper](https://github.com/OHF-Voice/piper1-gpl), a free neural voice that runs locally. It sounds far better than the system voices. To set it up:
+
+```bash
+uv tool install piper-tts
+mkdir -p ~/.local/share/piper-voices && cd ~/.local/share/piper-voices
+curl -LO https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx
+curl -LO https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/high/en_US-lessac-high.onnx.json
+```
+
+The script uses the first model in that folder, or the one that `PREP_ME_PIPER_MODEL` or `voice` names. With no model, it uses macOS `say` or `espeak-ng` and prints a warning.
