@@ -41,6 +41,15 @@ Running examples for explanations, and context for reviews.
 - Writing rules for follow-ups: <for example "short, no em dashes", or the name of a skill to follow>
 - Email drafts: <"create them without asking" or "only when I ask">. `meeting-packet` never sends.
 
+## Prep me
+
+- Council models: <OpenAI model>, <Claude model> (leave empty to use the newest flagship of each)
+- Video voice: <macOS voice name, or empty for the default>
+- Routes, first match wins. Each has the kinds of prep it covers, a folder, sources and optional rules:
+  - `work`: <kinds, such as customer meetings>. Folder: <path>. Self sources: <files>. Terms to avoid: <file>.
+  - `private`: <kinds, such as personal matters>. Folder: <path>. Rules file: <path>. `isolated`: nothing about this route leaves its folder.
+  - `default`: everything else. Folder: <path>.
+
 ## GitHub defaults
 
 - Personal account: <user>; organizations: <orgs and their rules>
